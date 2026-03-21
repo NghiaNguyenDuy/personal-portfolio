@@ -1,0 +1,237 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  READER
+}
+
+enum PostStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum ArticleType {
+  BLOG
+  NEWS
+}
+
+enum ReadingStatus {
+  UNREAD
+  READING
+  ARCHIVED
+}
+
+enum CommentStatus {
+  PENDING
+  APPROVED
+  HIDDEN
+  DELETED
+}
+
+enum SourceType {
+  RSS
+  ATOM
+  BLOG_INDEX
+  MANUAL
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  passwordHash  String?
+  role          UserRole  @default(READER)
+  avatarUrl     String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  comments      Comment[]
+  authoredPosts Post[]    @relation("PostAuthor")
+}
+
+model CareerProfile {
+  id             String       @id @default(cuid())
+  headline       String
+  shortBio       String
+  longBio        String
+  email          String
+  location       String
+  availability   String
+  resumeUrl      String?
+  featuredSkills String[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  experiences    Experience[]
+  projects       Project[]
+}
+
+model Experience {
+  id              String        @id @default(cuid())
+  careerProfileId String
+  company         String
+  role            String
+  startDate       DateTime
+  endDate         DateTime?
+  summary         String
+  achievements    String[]
+  sortOrder       Int           @default(0)
+  careerProfile   CareerProfile @relation(fields: [careerProfileId], references: [id], onDelete: Cascade)
+}
+
+model Project {
+  id              String        @id @default(cuid())
+  careerProfileId String
+  title           String
+  slug            String        @unique
+  summary         String
+  description     String
+  stack           String[]
+  repoUrl         String?
+  liveUrl         String?
+  featured        Boolean       @default(false)
+  sortOrder       Int           @default(0)
+  careerProfile   CareerProfile @relation(fields: [careerProfileId], references: [id], onDelete: Cascade)
+}
+
+model Post {
+  id             String      @id @default(cuid())
+  authorId       String
+  slug           String      @unique
+  title          String
+  summary        String
+  body           String
+  coverImage     String?
+  readingMinutes Int?
+  status         PostStatus  @default(DRAFT)
+  publishedAt    DateTime?
+  seoTitle       String?
+  seoDescription String?
+  tags           String[]
+  categories     String[]
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  author         User        @relation("PostAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+  comments       Comment[]
+}
+
+model Topic {
+  id              String          @id @default(cuid())
+  slug            String          @unique
+  name            String
+  description     String
+  isTracked       Boolean         @default(true)
+  articleLimit    Int             @default(8)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  summaries       NewsSummary[]
+  articles        ExternalArticle[]
+  defaultSources  ContentSource[]
+}
+
+model ContentSource {
+  id             String        @id @default(cuid())
+  slug           String        @unique
+  name           String
+  sourceUrl      String        @unique
+  feedUrl        String?
+  sourceType     SourceType    @default(BLOG_INDEX)
+  isActive       Boolean       @default(true)
+  defaultTopicId String?
+  lastCheckedAt  DateTime?
+  lastImportedAt DateTime?
+  lastError      String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  defaultTopic   Topic?        @relation(fields: [defaultTopicId], references: [id], onDelete: SetNull)
+  articles       ExternalArticle[]
+}
+
+model Tag {
+  id        String            @id @default(cuid())
+  slug      String            @unique
+  label     String
+  createdAt DateTime          @default(now())
+  articles  ExternalArticle[]
+}
+
+model ExternalArticle {
+  id               String         @id @default(cuid())
+  topicId          String?
+  sourceId         String?
+  sourceUrl        String         @unique
+  title            String
+  publisher        String
+  excerpt          String?
+  publishedAt      DateTime?
+  articleType      ArticleType
+  status           ReadingStatus  @default(UNREAD)
+  category         String
+  note             String?
+  domain           String?
+  faviconUrl       String?
+  analysisStatus   String?
+  analysisProvider String?
+  analyzedAt       DateTime?
+  analysisError    String?
+  importedAt       DateTime       @default(now())
+  lastSeenAt       DateTime       @default(now())
+  contentHash      String?
+  isSummaryCandidate Boolean      @default(true)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  topic            Topic?         @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  source           ContentSource? @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  tags             Tag[]
+  summaries        NewsSummary[]
+}
+
+model NewsSummary {
+  id             String            @id @default(cuid())
+  topicId        String
+  title          String
+  summary        String
+  generatedAt    DateTime          @default(now())
+  sourceCount    Int
+  articleCount   Int               @default(0)
+  provider       String
+  model          String?
+  freshnessLabel String
+  createdAt      DateTime          @default(now())
+  topic          Topic             @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  sources        SummarySource[]
+  articles       ExternalArticle[]
+}
+
+model SummarySource {
+  id            String      @id @default(cuid())
+  newsSummaryId String
+  title         String
+  publisher     String
+  url           String
+  publishedAt   DateTime?
+  newsSummary   NewsSummary @relation(fields: [newsSummaryId], references: [id], onDelete: Cascade)
+}
+
+model Comment {
+  id         String         @id @default(cuid())
+  postId     String
+  authorId   String
+  parentId   String?
+  body       String
+  status     CommentStatus  @default(PENDING)
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+  post       Post           @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author     User           @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  parent     Comment?       @relation("CommentReplies", fields: [parentId], references: [id], onDelete: SetNull)
+  replies    Comment[]      @relation("CommentReplies")
+
+  @@index([postId, status])
+}

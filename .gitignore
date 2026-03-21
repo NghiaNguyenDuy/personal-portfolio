@@ -1,0 +1,13 @@
+.next
+node_modules
+.env
+.env.local
+.env.example
+.env.production
+dist
+coverage
+*.log
+prisma/dev.db
+prisma/dev.db-journal
+note.txt
+skills
