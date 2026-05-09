@@ -10,7 +10,7 @@ A cost-conscious personal portfolio platform built with Next.js App Router and P
 - Admin reading manager for curated external articles and notes
 - Auth-gated comment workflow model
 - Prisma schema for a managed Postgres deployment
-- Token-protected admin workflow for importing sources and refreshing news summaries
+- Token-protected admin workflow for importing sources and accepting Codex-prepared news summaries
 
 ## Setup
 
@@ -79,7 +79,9 @@ docker compose down
 - The repository ships with demo data so the UI has complete flows before a real database and auth provider are attached.
 - The `/admin` area currently uses a lightweight placeholder guard pattern and is ready to be connected to your auth provider of choice.
 - The news cron route is implemented behind `CRON_SECRET` and service adapters in `lib/services/news.ts`.
-- The admin news workflow accepts `POST /api/admin/news-workflow` with `Authorization: Bearer $NEWS_WORKFLOW_TOKEN`. It imports active sources, refreshes tracked topic summaries, and revalidates public/admin news paths.
+- The admin news workflow accepts `GET /api/admin/news-workflow` with `Authorization: Bearer $NEWS_WORKFLOW_TOKEN` to return the active source registry, tracked topics, recent articles, the configured custom summary message, and the prepared-summary payload schema.
+- The admin news workflow accepts prepared summaries via `POST /api/admin/news-workflow` with `mode: "prepared"`, `summaries`, and source citations. This stores Codex-written summaries and revalidates public/admin news paths without calling the OpenAI API from the deployed app.
+- The older `POST /api/admin/news-workflow` without a prepared payload remains available for source import and server-side fallback summary refresh.
 - Keep `.env.example` placeholder-only. Rotate any real provider keys or admin credentials that were ever copied into local notes or ignored env files before deploying automation.
 
 ## Vercel + Neon deployment notes
@@ -92,7 +94,10 @@ docker compose down
 
 ## Remote news workflow runner
 
-- Run `npm run automation:news -- --target https://your-vercel-app.vercel.app` to post to the production news workflow endpoint.
+- Run `npm run automation:news -- --target https://your-vercel-app.vercel.app --context` to fetch the current dynamic source registry and prepared-summary schema.
+- After Codex searches the source URLs and writes a prepared payload, run `npm run automation:news -- --target https://your-vercel-app.vercel.app --prepared-payload ./.codex-news-prepared.json` to post the prepared summary back to production.
+- The legacy `npm run automation:news -- --target https://your-vercel-app.vercel.app` command still posts to the production news workflow endpoint for server-side import and fallback refresh.
 - The runner reads `NEWS_WORKFLOW_TOKEN` from the process environment, `.env.local`, `.env`, or `.env.production`, without printing the token.
 - The runner refuses `localhost` unless `--allow-local` is passed, so the scheduled automation does not silently post to a local dev server.
 - Run `npm run automation:news -- --target https://your-vercel-app.vercel.app --check-config` to validate target/token configuration without posting.
+- Add `NEWS_WORKFLOW_MESSAGE` on Vercel when you want the scheduled Codex job to use a custom editorial instruction while searching and writing the prepared summary.

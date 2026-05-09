@@ -13,7 +13,9 @@ function parseArgs(values) {
     target: undefined,
     checkConfig: false,
     allowLocal: false,
-    forceProdSecret: false
+    forceProdSecret: false,
+    context: false,
+    preparedPayload: undefined
   };
 
   for (let index = 0; index < values.length; index += 1) {
@@ -34,6 +36,22 @@ function parseArgs(values) {
       continue;
     }
 
+    if (value === "--context") {
+      parsed.context = true;
+      continue;
+    }
+
+    if (value === "--prepared-payload") {
+      parsed.preparedPayload = values[index + 1];
+      index += 1;
+      continue;
+    }
+
+    if (value.startsWith("--prepared-payload=")) {
+      parsed.preparedPayload = value.slice("--prepared-payload=".length);
+      continue;
+    }
+
     if (value === "--target") {
       parsed.target = values[index + 1];
       index += 1;
@@ -46,6 +64,10 @@ function parseArgs(values) {
     }
 
     throw new Error(`Unknown argument: ${value}`);
+  }
+
+  if (parsed.context && parsed.preparedPayload) {
+    throw new Error("Use either --context or --prepared-payload, not both.");
   }
 
   return parsed;
@@ -179,7 +201,66 @@ function summarizeResult(status, payload) {
   };
 }
 
-async function postWorkflow(targetUrl, token) {
+function readPreparedPayload(filePath) {
+  if (!filePath) {
+    throw new Error("Missing prepared payload path. Pass --prepared-payload ./path/to/payload.json.");
+  }
+
+  const resolved = resolve(process.cwd(), filePath);
+  let payload;
+  try {
+    payload = JSON.parse(readFileSync(resolved, "utf8"));
+  } catch (error) {
+    throw new Error(`Unable to read prepared payload JSON at ${resolved}: ${error instanceof Error ? error.message : "unknown error"}`);
+  }
+
+  if (!payload || typeof payload !== "object") {
+    throw new Error("Prepared payload must be a JSON object.");
+  }
+
+  return {
+    mode: "prepared",
+    ...payload
+  };
+}
+
+async function requestWorkflowContext(targetUrl, token) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+
+  try {
+    const endpoint = `${targetUrl}/api/admin/news-workflow`;
+    const response = await fetch(endpoint, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`
+      },
+      signal: controller.signal
+    });
+
+    const text = await response.text();
+    let payload;
+    try {
+      payload = text ? JSON.parse(text) : {};
+    } catch {
+      payload = {
+        ok: false,
+        message: text.slice(0, 500)
+      };
+    }
+
+    console.log(JSON.stringify(payload, null, 2));
+
+    if (!response.ok || payload.ok !== true) {
+      process.exitCode = 1;
+    }
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function postWorkflow(targetUrl, token, body = { trigger: "codex-automation" }) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
 
@@ -192,9 +273,7 @@ async function postWorkflow(targetUrl, token) {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`
       },
-      body: JSON.stringify({
-        trigger: "codex-automation"
-      }),
+      body: JSON.stringify(body),
       signal: controller.signal
     });
 
@@ -236,6 +315,10 @@ try {
         2
       )
     );
+  } else if (args.context) {
+    await requestWorkflowContext(targetUrl, token);
+  } else if (args.preparedPayload) {
+    await postWorkflow(targetUrl, token, readPreparedPayload(args.preparedPayload));
   } else {
     await postWorkflow(targetUrl, token);
   }
