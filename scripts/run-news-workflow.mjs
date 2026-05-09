@@ -12,7 +12,8 @@ function parseArgs(values) {
   const parsed = {
     target: undefined,
     checkConfig: false,
-    allowLocal: false
+    allowLocal: false,
+    forceProdSecret: false
   };
 
   for (let index = 0; index < values.length; index += 1) {
@@ -25,6 +26,11 @@ function parseArgs(values) {
 
     if (value === "--allow-local") {
       parsed.allowLocal = true;
+      continue;
+    }
+
+    if (value === "--force-prod-secret") {
+      parsed.forceProdSecret = true;
       continue;
     }
 
@@ -132,7 +138,7 @@ function resolveToken() {
     throw new Error("Missing NEWS_WORKFLOW_TOKEN. Store it in the automation environment or a local ignored .env file.");
   }
 
-  if (PLACEHOLDER_PATTERN.test(token)) {
+  if (PLACEHOLDER_PATTERN.test(token) && !args.forceProdSecret) {
     throw new Error("NEWS_WORKFLOW_TOKEN still looks like a placeholder. Use the same rotated value configured on Vercel.");
   }
 
@@ -144,6 +150,12 @@ function summarizeResult(status, payload) {
   const summaries = Array.isArray(payload.summaries) ? payload.summaries : [];
   const importedCount = imports.reduce((total, item) => total + Number(item.importedCount ?? 0), 0);
   const checkedCount = imports.reduce((total, item) => total + Number(item.checkedCount ?? 0), 0);
+  const failedSources = imports
+    .filter((item) => item?.ok === false)
+    .map((item) => ({
+      source: item.sourceName,
+      message: item.error ?? "Unable to import source."
+    }));
   const failedTopics = summaries.filter((summary) => summary?.ok === false).map((summary) => summary.topic);
 
   return {
@@ -153,8 +165,10 @@ function summarizeResult(status, payload) {
     imports: {
       sourceCount: imports.length,
       checkedCount,
-      importedCount
+      importedCount,
+      failedSources
     },
+    topicSlugs: Array.isArray(payload.topicSlugs) ? payload.topicSlugs : [],
     summaries: summaries.map((summary) => ({
       topic: summary.topic,
       ok: summary.ok === true,

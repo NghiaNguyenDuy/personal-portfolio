@@ -8,6 +8,10 @@ export const NEWS_OVERVIEW_WINDOWS = [3, 5, 7, 14] as const;
 const DEFAULT_NEWS_OVERVIEW_WINDOW = 5;
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 
+function shouldUseStaticFallback() {
+  return process.env.ENABLE_STATIC_CONTENT_FALLBACK === "true" || !process.env.DATABASE_URL;
+}
+
 function splitBody(body: string) {
   return cleanDisplayText(body, { maxLength: 3000 })
     .split(/\n\s*\n/g)
@@ -423,12 +427,10 @@ export async function getImportedArticlesData(filters: ContentFilters = {}): Pro
       include: { topic: true, source: true, tags: true },
       orderBy: [{ importedAt: "desc" }, { publishedAt: "desc" }]
     });
-    if (!result.length) {
-      return applyArticleFilters(readingList, filters);
-    }
+
     return result.map(mapReadingItem);
   } catch {
-    return applyArticleFilters(readingList, filters);
+    return shouldUseStaticFallback() ? applyArticleFilters(readingList, filters) : [];
   }
 }
 
@@ -498,12 +500,10 @@ export async function getContentSourcesData(): Promise<ContentSource[]> {
       include: { defaultTopic: true },
       orderBy: { updatedAt: "desc" }
     });
-    if (!result.length) {
-      return contentSources;
-    }
+
     return result.map(mapSource);
   } catch {
-    return contentSources;
+    return shouldUseStaticFallback() ? contentSources : [];
   }
 }
 
@@ -530,12 +530,10 @@ export async function getAdminCommentsData(): Promise<Comment[]> {
 export async function getTopicsData(): Promise<Topic[]> {
   try {
     const result = await prisma.topic.findMany({ where: { isTracked: true }, orderBy: { name: "asc" } });
-    if (!result.length) {
-      return topics.filter((topic) => topic.isTracked);
-    }
+
     return result.map(mapTopic);
   } catch {
-    return topics.filter((topic) => topic.isTracked);
+    return shouldUseStaticFallback() ? topics.filter((topic) => topic.isTracked) : [];
   }
 }
 
@@ -568,12 +566,10 @@ export async function getSummariesData(filters: ContentFilters = {}): Promise<Ne
       },
       orderBy: { generatedAt: "desc" }
     });
-    if (!result.length) {
-      return applySummaryFilters(summaries, filters);
-    }
+
     return result.map(mapSummary);
   } catch {
-    return applySummaryFilters(summaries, filters);
+    return shouldUseStaticFallback() ? applySummaryFilters(summaries, filters) : [];
   }
 }
 
@@ -607,11 +603,15 @@ export async function getSummaryByTopicData(slug: string, filters: Omit<ContentF
       orderBy: { generatedAt: "desc" }
     });
     if (!result) {
-      return applySummaryFilters(summaries.filter((summary) => summary.topicSlug === slug), { ...filters, topic: slug })[0] ?? null;
+      return shouldUseStaticFallback()
+        ? applySummaryFilters(summaries.filter((summary) => summary.topicSlug === slug), { ...filters, topic: slug })[0] ?? null
+        : null;
     }
     return mapSummary(result);
   } catch {
-    return applySummaryFilters(summaries.filter((summary) => summary.topicSlug === slug), { ...filters, topic: slug })[0] ?? null;
+    return shouldUseStaticFallback()
+      ? applySummaryFilters(summaries.filter((summary) => summary.topicSlug === slug), { ...filters, topic: slug })[0] ?? null
+      : null;
   }
 }
 

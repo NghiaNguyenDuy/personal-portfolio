@@ -14,6 +14,7 @@ export interface NewsPipelineResult {
   message: string;
   imports: SourceImportResult[];
   importError: string | null;
+  importWarnings: Array<{ source: string; message: string }>;
   summaries: NewsPipelineSummaryResult[];
   failedTopics: string[];
   topicSlugs: string[];
@@ -52,12 +53,22 @@ export async function refreshContentPipeline(): Promise<NewsPipelineResult> {
   }
 
   const failedTopics = summaryResults.filter((summary) => !summary.ok).map((summary) => summary.topic);
-  const ok = !importError && failedTopics.length === 0;
+  const importWarnings = importResults
+    .filter((result) => !result.ok)
+    .map((result) => ({
+      source: result.sourceName,
+      message: result.error ?? "Unable to import source."
+    }));
+  const topicSlugs = topics.map((topic) => topic.slug);
+  const ok = !importError && failedTopics.length === 0 && topicSlugs.length > 0;
   const message = ok
-    ? "News workflow completed."
+    ? importWarnings.length
+      ? `News workflow completed with ${importWarnings.length} source warning${importWarnings.length === 1 ? "" : "s"}.`
+      : "News workflow completed."
     : [
         importError ? `Source import failed: ${importError}` : null,
-        failedTopics.length ? `Summary generation failed for ${failedTopics.join(", ")}.` : null
+        failedTopics.length ? `Summary generation failed for ${failedTopics.join(", ")}.` : null,
+        topicSlugs.length ? null : "No tracked topics found. Seed the production database before running automation."
       ]
         .filter(Boolean)
         .join(" ");
@@ -67,8 +78,9 @@ export async function refreshContentPipeline(): Promise<NewsPipelineResult> {
     message,
     imports: importResults,
     importError,
+    importWarnings,
     summaries: summaryResults,
     failedTopics,
-    topicSlugs: topics.map((topic) => topic.slug)
+    topicSlugs
   };
 }
