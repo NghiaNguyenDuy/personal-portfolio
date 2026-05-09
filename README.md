@@ -89,3 +89,10 @@ docker compose down
 - `DIRECT_URL` should use the Neon direct connection string for Prisma migrations.
 - Do not use local placeholder URLs such as `localhost:5432` in Vercel environment variables.
 - After the first deployment, seed production once from a trusted local shell with the Neon direct URL, then redeploy or refresh the app.
+
+## Remote news workflow runner
+
+- Run `npm run automation:news -- --target https://your-vercel-app.vercel.app` to post to the production news workflow endpoint.
+- The runner reads `NEWS_WORKFLOW_TOKEN` from the process environment, `.env.local`, `.env`, or `.env.production`, without printing the token.
+- The runner refuses `localhost` unless `--allow-local` is passed, so the scheduled automation does not silently post to a local dev server.
+- Run `npm run automation:news -- --target https://your-vercel-app.vercel.app --check-config` to validate target/token configuration without posting.
