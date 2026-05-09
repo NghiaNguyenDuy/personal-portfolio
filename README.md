@@ -81,3 +81,11 @@ docker compose down
 - The news cron route is implemented behind `CRON_SECRET` and service adapters in `lib/services/news.ts`.
 - The admin news workflow accepts `POST /api/admin/news-workflow` with `Authorization: Bearer $NEWS_WORKFLOW_TOKEN`. It imports active sources, refreshes tracked topic summaries, and revalidates public/admin news paths.
 - Keep `.env.example` placeholder-only. Rotate any real provider keys or admin credentials that were ever copied into local notes or ignored env files before deploying automation.
+
+## Vercel + Neon deployment notes
+
+- Set the Vercel build command to `npm run vercel-build` so Prisma Client is generated, migrations are deployed, and then Next.js builds.
+- `DATABASE_URL` should use the Neon pooled connection string for runtime queries.
+- `DIRECT_URL` should use the Neon direct connection string for Prisma migrations.
+- Do not use local placeholder URLs such as `localhost:5432` in Vercel environment variables.
+- After the first deployment, seed production once from a trusted local shell with the Neon direct URL, then redeploy or refresh the app.
