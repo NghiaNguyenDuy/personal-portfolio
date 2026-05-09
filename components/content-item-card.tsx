@@ -6,7 +6,7 @@ import { formatDate } from "@/lib/utils";
 
 export function ContentItemCard({ item }: { item: ExternalArticle }) {
   return (
-    <article className="card content-item-card">
+    <article className="list-card content-item-card">
       <div className="meta-row wrap-row">
         {item.sourceName ? <SourceBadge label={item.sourceName} /> : <span>{item.publisher}</span>}
         <span>{formatDate(item.publishedAt)}</span>

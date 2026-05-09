@@ -1,10 +1,15 @@
 ﻿import { comments, contentSources, posts, readingList, summaries, topics } from "@/lib/data";
 import { prisma } from "@/lib/prisma";
-import type { Comment, ContentFilters, ContentSource, ExternalArticle, NewsSummary, Post, Tag, Topic } from "@/lib/types";
+import { cleanDisplayText } from "@/lib/text-cleanup";
+import type { Comment, ContentFilters, ContentSource, ExternalArticle, NewsOverview, NewsOverviewGroup, NewsOverviewSource, NewsSummary, Post, Tag, Topic } from "@/lib/types";
 import { byDateDesc, uniqueBy } from "@/lib/utils";
 
+export const NEWS_OVERVIEW_WINDOWS = [3, 5, 7, 14] as const;
+const DEFAULT_NEWS_OVERVIEW_WINDOW = 5;
+const DAY_IN_MS = 24 * 60 * 60 * 1000;
+
 function splitBody(body: string) {
-  return body
+  return cleanDisplayText(body, { maxLength: 3000 })
     .split(/\n\s*\n/g)
     .map((item) => item.trim())
     .filter(Boolean);
@@ -18,7 +23,7 @@ function mapTag(tag: { id?: string; slug: string; label: string }): Tag {
   return {
     id: tag.id,
     slug: tag.slug,
-    label: tag.label
+    label: cleanDisplayText(tag.label, { maxLength: 80, fallback: tag.slug })
   };
 }
 
@@ -84,7 +89,7 @@ function mapSource(source: {
   return {
     id: source.id,
     slug: source.slug,
-    name: source.name,
+    name: cleanDisplayText(source.name, { maxLength: 120, fallback: source.slug }),
     sourceUrl: source.sourceUrl,
     feedUrl: source.feedUrl ?? undefined,
     sourceType: source.sourceType.toLowerCase().replace("_", "-") as ContentSource["sourceType"],
@@ -92,7 +97,7 @@ function mapSource(source: {
     defaultTopicSlug: source.defaultTopic?.slug ?? undefined,
     lastCheckedAt: source.lastCheckedAt?.toISOString(),
     lastImportedAt: source.lastImportedAt?.toISOString(),
-    lastError: source.lastError ?? undefined
+    lastError: source.lastError ? cleanDisplayText(source.lastError, { maxLength: 240 }) : undefined
   };
 }
 
@@ -123,22 +128,22 @@ function mapReadingItem(item: {
   return {
     id: item.id,
     sourceUrl: item.sourceUrl,
-    title: item.title,
-    publisher: item.publisher,
-    excerpt: item.excerpt ?? "",
+    title: cleanDisplayText(item.title, { maxLength: 180, fallback: "Untitled source" }),
+    publisher: cleanDisplayText(item.publisher, { maxLength: 120, fallback: "Unknown publisher" }),
+    excerpt: cleanDisplayText(item.excerpt, { maxLength: 360 }),
     publishedAt: (item.publishedAt ?? new Date()).toISOString(),
     articleType: item.articleType.toLowerCase() as ExternalArticle["articleType"],
     status: item.status.toLowerCase() as ExternalArticle["status"],
-    category: item.category,
-    note: item.note ?? "",
+    category: cleanDisplayText(item.category, { maxLength: 80, fallback: "Engineering Practice" }),
+    note: cleanDisplayText(item.note, { maxLength: 360 }),
     topicSlug: item.topic?.slug ?? undefined,
     sourceSlug: item.source?.slug ?? item.sourceSlug ?? undefined,
-    sourceName: item.source?.name ?? item.sourceName ?? undefined,
+    sourceName: cleanDisplayText(item.source?.name ?? item.sourceName, { maxLength: 120 }) || undefined,
     tags: (item.tags ?? []).map(mapTag),
     analysisStatus: (item.analysisStatus?.toLowerCase() as ExternalArticle["analysisStatus"]) ?? undefined,
-    analysisProvider: item.analysisProvider ?? undefined,
+    analysisProvider: item.analysisProvider ? cleanDisplayText(item.analysisProvider, { maxLength: 120 }) : undefined,
     analyzedAt: item.analyzedAt?.toISOString(),
-    analysisError: item.analysisError ?? undefined,
+    analysisError: item.analysisError ? cleanDisplayText(item.analysisError, { maxLength: 240 }) : undefined,
     importedAt: item.importedAt?.toISOString(),
     lastSeenAt: item.lastSeenAt?.toISOString(),
     isSummaryCandidate: item.isSummaryCandidate ?? true
@@ -149,8 +154,8 @@ function mapTopic(topic: { id: string; slug: string; name: string; description: 
   return {
     id: topic.id,
     slug: topic.slug,
-    name: topic.name,
-    description: topic.description,
+    name: cleanDisplayText(topic.name, { maxLength: 120, fallback: topic.slug }),
+    description: cleanDisplayText(topic.description, { maxLength: 360 }),
     isTracked: topic.isTracked
   };
 }
@@ -180,23 +185,26 @@ function mapSummary(summary: {
       .map((name) => ({ name })),
     (source) => source.name
   ).map((source) => source.name);
+  const cleanSourceNames = sourceNames
+    .map((sourceName) => cleanDisplayText(sourceName, { maxLength: 120 }))
+    .filter(Boolean);
 
   return {
     id: summary.id,
     topicSlug: summary.topic.slug,
-    title: summary.title,
+    title: cleanDisplayText(summary.title, { maxLength: 180, fallback: "Source overview" }),
     summary: splitBody(summary.summary),
     generatedAt: summary.generatedAt.toISOString(),
-    freshnessLabel: summary.freshnessLabel,
+    freshnessLabel: cleanDisplayText(summary.freshnessLabel, { maxLength: 80, fallback: "Generated" }),
     sourceCount: summary.sourceCount,
     articleCount: summary.articleCount ?? summary.sources.length,
-    provider: summary.provider,
-    model: summary.model ?? "unknown",
-    sourceNames,
+    provider: cleanDisplayText(summary.provider, { maxLength: 120, fallback: "Imported sources" }),
+    model: cleanDisplayText(summary.model, { maxLength: 120, fallback: "unknown" }),
+    sourceNames: cleanSourceNames,
     tags: derivedTags,
     sources: summary.sources.map((source) => ({
-      title: source.title,
-      publisher: source.publisher,
+      title: cleanDisplayText(source.title, { maxLength: 180, fallback: "Untitled source" }),
+      publisher: cleanDisplayText(source.publisher, { maxLength: 120, fallback: "Unknown publisher" }),
       url: source.url,
       publishedAt: (source.publishedAt ?? new Date()).toISOString()
     }))
@@ -232,6 +240,105 @@ function applySummaryFilters(items: NewsSummary[], filters: ContentFilters) {
       return true;
     })
   );
+}
+
+function itemTimestamp(item: ExternalArticle) {
+  return new Date(item.publishedAt || item.importedAt || item.lastSeenAt || 0).getTime();
+}
+
+function groupByCount<T>(
+  items: T[],
+  keyFn: (item: T) => string | undefined,
+  options: {
+    hrefFn?: (label: string) => string | undefined;
+    dateFn?: (item: T) => string | undefined;
+  } = {}
+): NewsOverviewGroup[] {
+  const groups = new Map<string, { count: number; lastPublishedAt?: string }>();
+
+  for (const item of items) {
+    const label = keyFn(item);
+    if (!label) continue;
+
+    const existing = groups.get(label) ?? { count: 0, lastPublishedAt: undefined };
+    const nextDate = options.dateFn?.(item);
+    const latestDate =
+      existing.lastPublishedAt && nextDate
+        ? new Date(existing.lastPublishedAt).getTime() > new Date(nextDate).getTime()
+          ? existing.lastPublishedAt
+          : nextDate
+        : existing.lastPublishedAt ?? nextDate;
+
+    groups.set(label, {
+      count: existing.count + 1,
+      lastPublishedAt: latestDate
+    });
+  }
+
+  return Array.from(groups.entries())
+    .map(([label, value]) => ({
+      label,
+      count: value.count,
+      href: options.hrefFn?.(label),
+      lastPublishedAt: value.lastPublishedAt
+    }))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+}
+
+function buildOverviewSources(items: ExternalArticle[]): NewsOverviewSource[] {
+  return items.map((item) => ({
+    id: item.id,
+    title: item.title,
+    publisher: item.publisher,
+    url: item.sourceUrl,
+    publishedAt: item.publishedAt,
+    sourceName: item.sourceName,
+    sourceSlug: item.sourceSlug,
+    topicSlug: item.topicSlug,
+    category: item.category,
+    articleType: item.articleType,
+    excerpt: item.note || item.excerpt,
+    tags: item.tags
+  }));
+}
+
+function buildOverviewSummary(input: {
+  windowDays: number;
+  items: ExternalArticle[];
+  sourceBreakdown: NewsOverviewGroup[];
+  topicBreakdown: NewsOverviewGroup[];
+  topTags: NewsOverviewGroup[];
+}) {
+  const { windowDays, items, sourceBreakdown, topicBreakdown, topTags } = input;
+
+  if (!items.length) {
+    return [
+      `No imported source items matched the latest ${windowDays}-day overview window.`,
+      "Import active sources from the registry or widen the window to build a source-backed overview."
+    ];
+  }
+
+  const sourceNames = sourceBreakdown.slice(0, 3).map((source) => source.label).join(", ");
+  const topicNames = topicBreakdown.slice(0, 3).map((topic) => topic.label).join(", ");
+  const tagNames = topTags.slice(0, 4).map((tag) => tag.label).join(", ");
+  const topTitles = items.slice(0, 3).map((item) => item.title).join("; ");
+
+  return [
+    `The latest ${windowDays}-day source window contains ${items.length} imported item${items.length === 1 ? "" : "s"} from ${sourceBreakdown.length} source${sourceBreakdown.length === 1 ? "" : "s"}${sourceNames ? `, led by ${sourceNames}` : ""}.`,
+    topicNames || tagNames
+      ? `The strongest themes are ${topicNames || "the filtered source set"}${tagNames ? `, with recurring tags around ${tagNames}` : ""}.`
+      : "The current source set is broad enough to review, but it does not yet have enough topic or tag structure for a stronger thematic split.",
+    `The source trail starts with ${topTitles}.`
+  ];
+}
+
+export function normalizeNewsOverviewWindow(value?: string | string[] | number): number {
+  const rawValue = Array.isArray(value) ? value[0] : value;
+  const numericValue = Number(rawValue);
+
+  return NEWS_OVERVIEW_WINDOWS.includes(numericValue as (typeof NEWS_OVERVIEW_WINDOWS)[number])
+    ? numericValue
+    : DEFAULT_NEWS_OVERVIEW_WINDOW;
 }
 
 export async function getPublishedPostsData(): Promise<Post[]> {
@@ -327,6 +434,62 @@ export async function getImportedArticlesData(filters: ContentFilters = {}): Pro
 
 export async function getReadingListData(filters: ContentFilters = {}) {
   return getImportedArticlesData(filters);
+}
+
+export async function getNewsOverviewData(filters: ContentFilters = {}, windowDays = DEFAULT_NEWS_OVERVIEW_WINDOW): Promise<NewsOverview> {
+  const [items, topics] = await Promise.all([getImportedArticlesData(filters), getTopicsData()]);
+  const sortedItems = byDateDesc(items);
+  const latestTimestamp = Math.max(...sortedItems.map(itemTimestamp), 0);
+  const cutoffTimestamp = latestTimestamp ? latestTimestamp - windowDays * DAY_IN_MS : 0;
+  const windowItems = latestTimestamp ? sortedItems.filter((item) => itemTimestamp(item) >= cutoffTimestamp) : [];
+  const topicNames = new Map(topics.map((topic) => [topic.slug, topic.name]));
+  const sourceBreakdown = groupByCount(windowItems, (item) => item.sourceName ?? item.publisher, {
+    hrefFn: (label) => {
+      const match = windowItems.find((item) => (item.sourceName ?? item.publisher) === label);
+      return match?.sourceSlug ? `/news?source=${match.sourceSlug}` : undefined;
+    },
+    dateFn: (item) => item.publishedAt
+  });
+  const topicBreakdown = groupByCount(windowItems, (item) => (item.topicSlug ? topicNames.get(item.topicSlug) ?? item.topicSlug : undefined), {
+    hrefFn: (label) => {
+      const match = windowItems.find((item) => (item.topicSlug ? topicNames.get(item.topicSlug) ?? item.topicSlug : undefined) === label);
+      return match?.topicSlug ? `/news/${match.topicSlug}` : undefined;
+    },
+    dateFn: (item) => item.publishedAt
+  });
+  const topTags = groupByCount(
+    windowItems.flatMap((item) => item.tags.map((tag) => ({ tag, item }))),
+    (entry) => entry.tag.label,
+    {
+      hrefFn: (label) => {
+        const match = windowItems.flatMap((item) => item.tags).find((tag) => tag.label === label);
+        return match ? `/news?tag=${match.slug}` : undefined;
+      },
+      dateFn: (entry) => entry.item.publishedAt
+    }
+  );
+
+  return {
+    windowDays,
+    title: `${windowDays}-day source overview`,
+    summary: buildOverviewSummary({
+      windowDays,
+      items: windowItems,
+      sourceBreakdown,
+      topicBreakdown,
+      topTags
+    }),
+    itemCount: windowItems.length,
+    sourceCount: sourceBreakdown.length,
+    topicCount: topicBreakdown.length,
+    tagCount: topTags.length,
+    startedAt: windowItems.length ? new Date(cutoffTimestamp).toISOString() : undefined,
+    endedAt: windowItems.length ? new Date(latestTimestamp).toISOString() : undefined,
+    sources: buildOverviewSources(windowItems),
+    sourceBreakdown,
+    topicBreakdown,
+    topTags
+  };
 }
 
 export async function getContentSourcesData(): Promise<ContentSource[]> {

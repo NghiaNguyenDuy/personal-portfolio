@@ -35,6 +35,24 @@ export interface Project {
   liveUrl?: string;
 }
 
+export interface Education {
+  id: string;
+  institution: string;
+  degree: string;
+  start: string;
+  end: string | null;
+  summary: string;
+  details?: string[];
+}
+
+export interface Publication {
+  id: string;
+  title: string;
+  venue: string;
+  year: string;
+  note?: string;
+}
+
 export interface CareerProfile {
   headline: string;
   shortBio: string;
@@ -46,6 +64,9 @@ export interface CareerProfile {
   featuredSkills: string[];
   experiences: Experience[];
   projects: Project[];
+  education?: Education[];
+  publications?: Publication[];
+  honors?: string[];
 }
 
 export interface Post {
@@ -111,6 +132,40 @@ export interface NewsSummary {
   sources: SourceLink[];
   sourceNames: string[];
   tags: Tag[];
+}
+
+export interface NewsOverviewSource extends SourceLink {
+  id: string;
+  sourceName?: string;
+  sourceSlug?: string;
+  topicSlug?: string;
+  category: string;
+  articleType: ArticleType;
+  excerpt: string;
+  tags: Tag[];
+}
+
+export interface NewsOverviewGroup {
+  label: string;
+  count: number;
+  href?: string;
+  lastPublishedAt?: string;
+}
+
+export interface NewsOverview {
+  windowDays: number;
+  title: string;
+  summary: string[];
+  itemCount: number;
+  sourceCount: number;
+  topicCount: number;
+  tagCount: number;
+  startedAt?: string;
+  endedAt?: string;
+  sources: NewsOverviewSource[];
+  sourceBreakdown: NewsOverviewGroup[];
+  topicBreakdown: NewsOverviewGroup[];
+  topTags: NewsOverviewGroup[];
 }
 
 export interface ExternalArticle {

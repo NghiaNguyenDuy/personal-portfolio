@@ -6,7 +6,7 @@ import { formatDate } from "@/lib/utils";
 
 export function SummaryCard({ summary }: { summary: NewsSummary }) {
   return (
-    <article className="card summary-card">
+    <article className="list-card summary-card">
       <div className="meta-row wrap-row">
         <span>{summary.freshnessLabel}</span>
         <span>{formatDate(summary.generatedAt)}</span>

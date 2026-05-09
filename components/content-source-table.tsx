@@ -6,6 +6,7 @@ export function ContentSourceTable({ sources }: { sources: ContentSource[] }) {
   return (
     <section className="card">
       <p className="eyebrow">Source registry</p>
+      <p className="section-description">Active sources feed the public Signals overview windows before individual items are reviewed in detail.</p>
       <table className="admin-table">
         <thead>
           <tr>

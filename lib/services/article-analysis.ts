@@ -1,4 +1,5 @@
 import { READING_CATEGORIES } from "@/lib/content";
+import { cleanDisplayText, stripHtmlToText } from "@/lib/text-cleanup";
 import type { ArticleAnalysisStatus, ArticleType } from "@/lib/types";
 import { slugify, uniqueBy } from "@/lib/utils";
 
@@ -85,11 +86,23 @@ export async function analyzeExternalArticle(input: AnalyzeExternalArticleInput)
 
   return {
     sourceUrl: normalizedUrl,
-    title: input.overrides?.title?.trim() || extracted.title,
-    publisher: input.overrides?.publisher?.trim() || extracted.publisher,
+    title: cleanDisplayText(input.overrides?.title || extracted.title, {
+      maxLength: 180,
+      fallback: extracted.title
+    }),
+    publisher: cleanDisplayText(input.overrides?.publisher || extracted.publisher, {
+      maxLength: 120,
+      fallback: extracted.publisher
+    }),
     excerpt: extracted.excerpt,
-    note: input.overrides?.note?.trim() || note,
-    category: sanitizeCategory(input.overrides?.category || category, extracted),
+    note: cleanDisplayText(input.overrides?.note || note, {
+      maxLength: 240,
+      fallback: buildFallbackNote(extracted)
+    }),
+    category: cleanDisplayText(sanitizeCategory(input.overrides?.category || category, extracted), {
+      maxLength: 80,
+      fallback: pickCategory(extracted)
+    }),
     tags: sanitizeTags(tags, extracted, category),
     articleType,
     publishedAt: extracted.publishedAt,
@@ -189,10 +202,22 @@ function extractArticle(result: FetchResult): ExtractedArticle {
 
   return {
     url: result.url,
-    title: cleanText(title),
-    publisher: cleanText(publisher),
-    excerpt: cleanText(excerpt).slice(0, 280),
-    bodyText: cleanText(bodyText).slice(0, MAX_CONTENT_CHARS),
+    title: cleanDisplayText(title, {
+      maxLength: 180,
+      fallback: startCaseFromSlug(url.pathname) ?? url.hostname
+    }),
+    publisher: cleanDisplayText(publisher, {
+      maxLength: 120,
+      fallback: prettifyHostname(url.hostname)
+    }),
+    excerpt: cleanDisplayText(excerpt, {
+      maxLength: 280,
+      fallback: firstSentence(bodyText)
+    }),
+    bodyText: cleanDisplayText(bodyText, {
+      maxLength: MAX_CONTENT_CHARS,
+      fallback: firstSentence(bodyText)
+    }),
     publishedAt: publishedAt && isValidDateString(publishedAt) ? new Date(publishedAt).toISOString() : undefined,
     domain: url.hostname
   };
@@ -213,14 +238,7 @@ function extractReadableText(html: string) {
     extractTagContent(html, "body") ??
     html;
 
-  return decodeHtmlEntities(
-    articleLike
-      .replace(/<script[\s\S]*?<\/script>/gi, " ")
-      .replace(/<style[\s\S]*?<\/style>/gi, " ")
-      .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
-      .replace(/<svg[\s\S]*?<\/svg>/gi, " ")
-      .replace(/<[^>]+>/g, " ")
-  );
+  return stripHtmlToText(articleLike, { maxLength: MAX_CONTENT_CHARS });
 }
 
 function extractTagContent(html: string, tagName: string) {
@@ -239,23 +257,6 @@ function findMetaContent(html: string, [attribute, value]: [string, string]) {
 function findTimeDateTime(html: string) {
   const match = html.match(/<time[^>]+datetime=["']([^"']+)["'][^>]*>/i);
   return match?.[1]?.trim();
-}
-
-function cleanText(value: string) {
-  return decodeHtmlEntities(value)
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function decodeHtmlEntities(value: string) {
-  return value
-    .replace(/&amp;/g, "&")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&apos;/g, "'")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&nbsp;/g, " ");
 }
 
 function startCaseFromSlug(pathname: string) {

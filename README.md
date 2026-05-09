@@ -10,6 +10,7 @@ A cost-conscious personal portfolio platform built with Next.js App Router and P
 - Admin reading manager for curated external articles and notes
 - Auth-gated comment workflow model
 - Prisma schema for a managed Postgres deployment
+- Token-protected admin workflow for importing sources and refreshing news summaries
 
 ## Setup
 
@@ -78,3 +79,5 @@ docker compose down
 - The repository ships with demo data so the UI has complete flows before a real database and auth provider are attached.
 - The `/admin` area currently uses a lightweight placeholder guard pattern and is ready to be connected to your auth provider of choice.
 - The news cron route is implemented behind `CRON_SECRET` and service adapters in `lib/services/news.ts`.
+- The admin news workflow accepts `POST /api/admin/news-workflow` with `Authorization: Bearer $NEWS_WORKFLOW_TOKEN`. It imports active sources, refreshes tracked topic summaries, and revalidates public/admin news paths.
+- Keep `.env.example` placeholder-only. Rotate any real provider keys or admin credentials that were ever copied into local notes or ignored env files before deploying automation.

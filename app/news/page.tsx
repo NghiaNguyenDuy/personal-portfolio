@@ -1,14 +1,22 @@
-﻿import type { Metadata } from "next";
-import { ContentItemCard } from "@/components/content-item-card";
+import type { Metadata } from "next";
 import { NewsFilterBar } from "@/components/news-filter-bar";
+import { NewsOverviewPanel } from "@/components/news-overview-panel";
 import { SectionHeading } from "@/components/section-heading";
 import { SummaryCard } from "@/components/summary-card";
-import { getAvailableTagsData, getContentSourcesData, getImportedArticlesData, getSummariesData, getTopicsData } from "@/lib/store";
+import {
+  getAvailableTagsData,
+  getContentSourcesData,
+  getNewsOverviewData,
+  getSummariesData,
+  getTopicsData,
+  NEWS_OVERVIEW_WINDOWS,
+  normalizeNewsOverviewWindow
+} from "@/lib/store";
 import type { ContentFilters } from "@/lib/types";
 
 export const metadata: Metadata = {
   title: "Signals",
-  description: "Simple summaries and saved articles from your tracked sources."
+  description: "A windowed overview of source-backed technical signals."
 };
 
 function normalizeFilters(raw: Record<string, string | string[] | undefined>): ContentFilters {
@@ -32,11 +40,13 @@ export default async function NewsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const filters = normalizeFilters(await searchParams);
-  const [topics, summaries, items, sources, tags] = await Promise.all([
+  const rawSearchParams = await searchParams;
+  const filters = normalizeFilters(rawSearchParams);
+  const windowDays = normalizeNewsOverviewWindow(rawSearchParams.window);
+  const [topics, summaries, overview, sources, tags] = await Promise.all([
     getTopicsData(),
     getSummariesData(filters),
-    getImportedArticlesData(filters),
+    getNewsOverviewData(filters, windowDays),
     getContentSourcesData(),
     getAvailableTagsData({ topic: filters.topic, source: filters.source, type: filters.type, q: filters.q })
   ]);
@@ -46,32 +56,21 @@ export default async function NewsPage({
       <div className="shell">
         <SectionHeading
           eyebrow="Signals"
-          title="Saved signals from your sources."
-          description="Read short summaries, search items, and filter by topic, source, type, or tag."
+          title="One overview from the source registry."
+          description="A rolling digest of imported blogs and articles, with source citations kept close enough to audit the signal."
         />
 
         <NewsFilterBar filters={filters} topics={topics} sources={sources} tags={tags} />
+        <NewsOverviewPanel overview={overview} filters={filters} windowOptions={NEWS_OVERVIEW_WINDOWS} />
 
         <section className="section-block">
           <div className="section-heading compact-heading">
-            <p className="eyebrow">Summaries</p>
-            <h2>{summaries.length} summaries</h2>
+            <p className="eyebrow">Topic summaries</p>
+            <h2>{summaries.length} focused lanes</h2>
           </div>
           <div className="two-grid">
             {summaries.map((summary) => (
               <SummaryCard key={summary.id} summary={summary} />
-            ))}
-          </div>
-        </section>
-
-        <section className="section-block">
-          <div className="section-heading compact-heading">
-            <p className="eyebrow">Items</p>
-            <h2>{items.length} items</h2>
-          </div>
-          <div className="two-grid">
-            {items.map((item) => (
-              <ContentItemCard key={item.id} item={item} />
             ))}
           </div>
         </section>

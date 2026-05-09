@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const result = await refreshContentPipeline();
-    return NextResponse.json({ ok: true, ...result });
+    return NextResponse.json(result, { status: result.ok ? 200 : 207 });
   } catch (error) {
     return NextResponse.json(
       {

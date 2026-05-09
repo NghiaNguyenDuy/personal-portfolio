@@ -175,8 +175,7 @@ export function NewsFilterBar({ basePath = "/news", filters, topics, sources, ta
       <div className="filter-head">
         <div>
           <p className="eyebrow">Filters</p>
-          <h3>Find signals faster.</h3>
-          <p className="section-description">Use quick chips for short lists. Bigger lists switch to search.</p>
+          <h3>Signal index</h3>
         </div>
         <Link href={basePath} className="button-link">
           Reset filters

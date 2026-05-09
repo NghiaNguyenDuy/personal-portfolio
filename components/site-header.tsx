@@ -19,9 +19,6 @@ export function SiteHeader() {
               {item.label}
             </Link>
           ))}
-          <Link href="/admin" className="nav-admin">
-            Admin
-          </Link>
         </nav>
       </div>
     </header>

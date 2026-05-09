@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { cleanDisplayText } from "@/lib/text-cleanup";
 import type { ArticleType } from "@/lib/types";
 import { uniqueBy } from "@/lib/utils";
 
@@ -9,6 +10,13 @@ interface SummaryFilters {
   sourceSlug?: string;
   tagSlug?: string;
   articleType?: ArticleType;
+}
+
+interface GeneratedSummary {
+  title: string;
+  paragraphs: string[];
+  provider: string;
+  model: string;
 }
 
 export async function generateSummaryForFilters(filters: SummaryFilters) {
@@ -38,14 +46,28 @@ export async function generateSummaryForFilters(filters: SummaryFilters) {
   }
 
   const summary = await buildSummary(topic.name, articles.map((article) => ({
-    title: article.title,
-    publisher: article.publisher,
-    excerpt: article.excerpt ?? "",
-    category: article.category,
+    title: cleanDisplayText(article.title, { maxLength: 180, fallback: "Untitled source" }),
+    publisher: cleanDisplayText(article.publisher, { maxLength: 120, fallback: "Unknown publisher" }),
+    excerpt: cleanDisplayText(article.excerpt, { maxLength: 360 }),
+    category: cleanDisplayText(article.category, { maxLength: 80, fallback: "Engineering Practice" }),
     url: article.sourceUrl,
     publishedAt: article.publishedAt?.toISOString() ?? new Date().toISOString(),
-    tags: article.tags.map((tag) => tag.label)
+    tags: article.tags.map((tag) => cleanDisplayText(tag.label, { maxLength: 80, fallback: tag.slug }))
   })));
+  const safeSummary = {
+    ...summary,
+    title: cleanDisplayText(summary.title, {
+      maxLength: 180,
+      fallback: `${topic.name} roundup`
+    }),
+    paragraphs: summary.paragraphs
+      .map((paragraph) => cleanDisplayText(paragraph, { maxLength: 700 }))
+      .filter(Boolean)
+      .slice(0, 3)
+  };
+  if (!safeSummary.paragraphs.length) {
+    safeSummary.paragraphs = [`Imported ${articles.length} source item${articles.length === 1 ? "" : "s"} for ${topic.name}.`];
+  }
 
   const generatedAt = new Date();
   const uniqueSources = uniqueBy(articles, (article) => article.publisher);
@@ -57,19 +79,19 @@ export async function generateSummaryForFilters(filters: SummaryFilters) {
     await prisma.newsSummary.update({
       where: { id: existing.id },
       data: {
-        title: summary.title,
-        summary: summary.paragraphs.join("\n\n"),
+        title: safeSummary.title,
+        summary: safeSummary.paragraphs.join("\n\n"),
         generatedAt,
         sourceCount: uniqueSources.length,
         articleCount: articles.length,
-        provider: summary.provider,
-        model: summary.model,
+        provider: safeSummary.provider,
+        model: safeSummary.model,
         freshnessLabel: "Generated just now",
         articles: { set: articleIds },
         sources: {
           create: articles.slice(0, 6).map((article) => ({
-            title: article.title,
-            publisher: article.publisher,
+            title: cleanDisplayText(article.title, { maxLength: 180, fallback: "Untitled source" }),
+            publisher: cleanDisplayText(article.publisher, { maxLength: 120, fallback: "Unknown publisher" }),
             url: article.sourceUrl,
             publishedAt: article.publishedAt
           }))
@@ -82,19 +104,19 @@ export async function generateSummaryForFilters(filters: SummaryFilters) {
   const created = await prisma.newsSummary.create({
     data: {
       topicId: topic.id,
-      title: summary.title,
-      summary: summary.paragraphs.join("\n\n"),
+      title: safeSummary.title,
+      summary: safeSummary.paragraphs.join("\n\n"),
       generatedAt,
       sourceCount: uniqueSources.length,
       articleCount: articles.length,
-      provider: summary.provider,
-      model: summary.model,
+      provider: safeSummary.provider,
+      model: safeSummary.model,
       freshnessLabel: "Generated just now",
       articles: { connect: articleIds },
       sources: {
         create: articles.slice(0, 6).map((article) => ({
-          title: article.title,
-          publisher: article.publisher,
+          title: cleanDisplayText(article.title, { maxLength: 180, fallback: "Untitled source" }),
+          publisher: cleanDisplayText(article.publisher, { maxLength: 120, fallback: "Unknown publisher" }),
           url: article.sourceUrl,
           publishedAt: article.publishedAt
         }))
@@ -108,7 +130,7 @@ export async function generateSummaryForFilters(filters: SummaryFilters) {
 async function buildSummary(
   topicName: string,
   articles: Array<{ title: string; publisher: string; excerpt: string; category: string; url: string; publishedAt: string; tags: string[] }>
-) {
+): Promise<GeneratedSummary> {
   if (process.env.OPENAI_API_KEY) {
     try {
       const response = await fetch("https://api.openai.com/v1/chat/completions", {

@@ -6,10 +6,10 @@ export function SiteFooter() {
     <footer className="site-footer">
       <div className="shell footer-shell">
         <div>
-          <p className="eyebrow">Portfolio Platform</p>
+          <p className="eyebrow">Personal hub</p>
           <h2>{siteConfig.name}</h2>
           <p className="muted">
-            Career story, engineering writing, curated reading, and AI-assisted news summaries in one place.
+            Data engineering writing, selected systems, curated reading, and source-backed signals in one place.
           </p>
         </div>
 

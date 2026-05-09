@@ -4,7 +4,7 @@ import { formatDate } from "@/lib/utils";
 
 export function PostCard({ post }: { post: Post }) {
   return (
-    <article className="card post-card">
+    <article className="list-card post-card">
       <div className="meta-row wrap-row">
         <span>{formatDate(post.publishedAt)}</span>
         <span>{post.readingMinutes} min read</span>

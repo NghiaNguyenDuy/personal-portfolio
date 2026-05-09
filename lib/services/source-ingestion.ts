@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { analyzeExternalArticle, normalizeTagLabels } from "@/lib/services/article-analysis";
+import { cleanDisplayText, decodeHtmlEntities, stripUnsafeHtmlBlocks } from "@/lib/text-cleanup";
 import { slugify, uniqueBy } from "@/lib/utils";
 
 interface SourceRecord {
@@ -238,12 +239,12 @@ async function fetchBlogIndexEntries(sourceUrl: string, publisher: string): Prom
 
   const html = await response.text();
   const base = new URL(sourceUrl);
-  const matches = Array.from(html.matchAll(/<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi));
+  const matches = Array.from(stripUnsafeHtmlBlocks(html).matchAll(/<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi));
 
   const entries = matches
     .map((match): SourceEntry | null => {
       const href = match[1];
-      const label = cleanText(match[2]);
+      const label = cleanText(match[2], 180);
       if (!href || label.length < 12) {
         return null;
       }
@@ -288,7 +289,7 @@ function parseFeedEntries(xml: string, sourceUrl: string, publisher: string): So
 
       return {
         url: new URL(link, sourceUrl).toString(),
-        title: cleanText(title),
+        title: cleanText(title, 180),
         publisher,
         publishedAt: publishedAt ? new Date(publishedAt).toISOString() : undefined
       } satisfies SourceEntry;
@@ -307,21 +308,11 @@ function findAtomLink(block: string) {
 }
 
 function decodeXml(value: string) {
-  return value
-    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
-    .replace(/&amp;/g, "&")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&nbsp;/g, " ");
+  return decodeHtmlEntities(value);
 }
 
-function cleanText(value: string) {
-  return decodeXml(value)
-    .replace(/<[^>]+>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+function cleanText(value: string, maxLength = 240) {
+  return cleanDisplayText(value, { maxLength });
 }
 
 export function inferSourceIdentity(input: { name?: string; sourceUrl: string; feedUrl?: string }) {

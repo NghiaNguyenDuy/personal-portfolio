@@ -2,6 +2,7 @@ import Link from "next/link";
 import { PostCard } from "@/components/post-card";
 import { SectionHeading } from "@/components/section-heading";
 import { SummaryCard } from "@/components/summary-card";
+import { siteConfig } from "@/lib/data";
 import { getCareerProfile } from "@/lib/repository";
 import { getFeaturedPostsData, getSummariesData, getTopicsData } from "@/lib/store";
 
@@ -16,34 +17,42 @@ export default async function HomePage() {
   return (
     <>
       <section className="hero">
-        <div className="shell hero-grid">
+        <div className="shell hero-layout">
           <div className="hero-copy">
-            <p className="eyebrow">Career + Writing + Signals</p>
-            <h1>Build a portfolio that reads like a thoughtful product, not a brochure.</h1>
-            <p>
-              {profile.shortBio} This platform combines your career profile, original writing, curated reading, and
-              daily topic summaries in a single editorial experience.
-            </p>
+            <p className="eyebrow">Personal hub</p>
+            <h1>{siteConfig.name}</h1>
+            <p className="hero-deck">{profile.headline}</p>
+            <p>{profile.shortBio} {profile.availability}</p>
             <div className="hero-cta">
-              <Link href="/about" className="button-link is-primary">
-                Explore profile
+              <Link href="/blog" className="button-link is-primary">
+                Read writing
               </Link>
-              <Link href="/blog" className="button-link">
-                Read articles
+              <Link href="/news" className="button-link">
+                Open signals
               </Link>
             </div>
           </div>
 
-          <aside className="hero-aside">
-            <div className="stat-card card">
-              <p className="eyebrow">Tracked topics</p>
-              <h3>{trackedTopics.length}</h3>
-              <p>Daily summaries with cached source citations and transparent freshness labels.</p>
+          <aside className="hero-index" aria-label="Hub index">
+            <div className="index-row">
+              <span>01</span>
+              <strong>Current focus</strong>
+              <p>Databricks lakehouse modernization, medallion pipelines, observability, and cost-aware platform operations.</p>
             </div>
-            <div className="stat-card card">
-              <p className="eyebrow">Publishing model</p>
-              <h3>{featuredPosts.length} featured posts</h3>
-              <p>Database-backed content design with room for drafts, moderation, and admin workflows.</p>
+            <div className="index-row">
+              <span>02</span>
+              <strong>Selected systems</strong>
+              <p>{profile.projects.length} systems mapped from data platform, analytics, and intelligent document processing work.</p>
+            </div>
+            <div className="index-row">
+              <span>03</span>
+              <strong>Latest writing</strong>
+              <p>{featuredPosts.length} featured notes from engineering practice and experiments.</p>
+            </div>
+            <div className="index-row">
+              <span>04</span>
+              <strong>Signal desk</strong>
+              <p>{trackedTopics.length} tracked topics with cached summaries and source citations.</p>
             </div>
           </aside>
         </div>
@@ -51,12 +60,27 @@ export default async function HomePage() {
 
       <section className="section">
         <div className="shell">
-          <SectionHeading eyebrow="About" title={profile.headline} description={profile.longBio} />
-          <div className="pill-row">
-            {profile.featuredSkills.map((skill) => (
-              <span key={skill} className="pill">
-                {skill}
-              </span>
+          <SectionHeading
+            eyebrow="Selected systems"
+            title="Data systems with clear platform boundaries, reliable transformation layers, and operational ownership."
+            description={profile.longBio}
+          />
+          <div className="project-list">
+            {profile.projects.map((project) => (
+              <article key={project.id} className="project-row">
+                <div>
+                  <p className="eyebrow">System</p>
+                  <h3>{project.title}</h3>
+                </div>
+                <p>{project.description}</p>
+                <div className="pill-row">
+                  {project.stack.map((item) => (
+                    <span key={item} className="pill">
+                      {item}
+                    </span>
+                  ))}
+                </div>
+              </article>
             ))}
           </div>
         </div>
@@ -65,8 +89,8 @@ export default async function HomePage() {
       <section className="section">
         <div className="shell">
           <SectionHeading
-            eyebrow="Featured Writing"
-            title="Experiment logs, architecture notes, and practical engineering essays."
+            eyebrow="Latest writing"
+            title="Notes that show the thinking behind lakehouse and platform operations."
           />
           <div className="two-grid">
             {featuredPosts.map((post) => (
@@ -79,8 +103,8 @@ export default async function HomePage() {
       <section className="section">
         <div className="shell">
           <SectionHeading
-            eyebrow="Daily Summaries"
-            title="Curated news summaries for topics worth tracking every day."
+            eyebrow="Signal desk"
+            title="Curated summaries for data engineering topics worth tracking."
           />
           <div className="two-grid">
             {latestSummaries.map((summary) => (

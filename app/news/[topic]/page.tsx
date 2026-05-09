@@ -96,7 +96,7 @@ export default async function NewsTopicPage({
                     {source.title}
                   </a>
                   <p className="muted">
-                    {source.publisher} · {formatDate(source.publishedAt)}
+                    {source.publisher} / {formatDate(source.publishedAt)}
                   </p>
                 </li>
               ))}
